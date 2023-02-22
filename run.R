@@ -14,15 +14,18 @@ data_raw <- fread("synthetic_data.csv")
 times_raw <- fread("synthetic_data_times.csv")
 
 # Number of FD nodes in FD discretisation
-n_node <- 101
+n_node_sim <- 101
 
 # Distance between FD nodes - assume domain length of 1
-dx <- 1.0 / (n_node - 1)
+dx <- 1.0 / (n_node_sim - 1)
+
+# Number of spatial data points per time sample
+n_node_data <- ncol(data_raw)
 
 data_raw_t <- transpose(data_raw)
-data_raw_t[, x := seq(0, 1, length.out = n_node)]
+data_raw_t[, x := seq(0, 1, length.out = n_node_data)]
 data_raw_long <- data_raw_t %>% melt(id.vars = "x")
-data_raw_long[, time := rep(times_raw[, V1], each = n_node)]
+data_raw_long[, time := rep(times_raw[, V1], each = n_node_data)]
 data_raw_long[, variable := NULL]
 setnames(data_raw_long, "value", "y")
 setcolorder(data_raw_long, c("time", "x", "y"))
@@ -61,7 +64,8 @@ output_times <- output_times_full[-1]
 
 # Construct the data list to send to Stan
 data_list <- list(
-  n_node = n_node,
+  n_node_data = n_node_data,
+  n_node_sim = n_node_sim,
   dx = dx,
   n_time = n_time,
   t_0 = t_0,
@@ -111,7 +115,7 @@ y_posterior_draws <- y_posterior_draws %>%
   .[, iter := as.integer(iter)] %>%
   .[order(iter, timestep)] %>%
   .[, time := output_times_full[timestep]] %>%
-  .[, x := (x - 1) / (n_node - 1)]
+  .[, x := (x - 1) / (n_node_data - 1)]
 
 # Calculate quantiles
 y_posterior_quantiles <- y_posterior_draws[
