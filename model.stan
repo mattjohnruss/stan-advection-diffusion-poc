@@ -32,15 +32,11 @@ functions {
 }
 
 data {
-  // Currently requires data for every node at every time
-  // TODO: make this more flexible, probably with spatial interpolation of the
-  // PDE solution so we can probe it wherever we like and compare this with the
-  // actual data. Alternatively, we could do it the other way round by
-  // interpolating the data onto the FD grid. The latter is probably slightly
-  // easier? But it's possibly also less correct.
-
   // Number of nodes in FD discretisation
-  int<lower=3> n_node;
+  int<lower=3> n_node_sim;
+
+  // Number of spatial data points per time sample
+  int<lower=1> n_node_data;
 
   // Distance between nodes in FD discretisation
   real<lower=0> dx;
@@ -51,14 +47,21 @@ data {
   // Starting time
   real<lower=0> t_0;
 
-  // Observed initial conditions for y
-  vector[n_node] y_0_obs;
+  // Initial conditions for y
+  // TODO if provided as data, need to interpolate onto the computational grid
+  // Alternatively, set the ICs in transformed data
+  //vector[n_node_sim] y_0;
 
   // Times of data points
   array[n_time] real<lower=0> times;
 
   // Observed data for y at all other times in each repeat
-  array[n_time] vector[n_node] y_obs;
+  // Note: this includes the boundaries
+  array[n_time] vector[n_node_data] y_obs;
+
+  // Lookup tables for interpolating solution onto data grid
+  array[n_node_data, 2] int node_indices;
+  array[n_node_data, 2] real node_distances;
 
   // ODE solver parameters
   real rel_tol;
@@ -73,6 +76,13 @@ data {
 }
 
 transformed data {
+  // Initial conditions at the computational nodes - see above
+  vector[n_node_sim] y_0;
+  for (i in 1:n_node_sim) {
+    real x = (i - 1.0) / (n_node_sim - 1.0);
+    y_0[i] = x * (1.0 - x);
+  }
+
   real y_bc_left = 0.0;
   real y_bc_right = 0.0;
 }
@@ -89,16 +99,16 @@ parameters {
 }
 
 transformed parameters {
-  //array[n_time] vector[n_node] y = ode_rk45_tol(rhs, y_0_obs[2:n_node - 1], t_0, times, rel_tol, abs_tol, max_num_steps, n_node, d, a, dx);
-  //array[n_time] vector[n_node - 2] y = ode_bdf(rhs, y_0_obs[2:n_node - 1], t_0, times, n_node, d, a, dx, y_bc_left, y_bc_right);
-  array[n_time] vector[n_node - 2] y = ode_bdf_tol(rhs, y_0_obs[2:n_node - 1], t_0, times, rel_tol, abs_tol, max_num_steps, n_node, d, a, dx, y_bc_left, y_bc_right);
+  //array[n_time] vector[n_node_sim] y = ode_rk45_tol(rhs, y_0[2:n_node_sim - 1], t_0, times, rel_tol, abs_tol, max_num_steps, n_node_sim, d, a, dx);
+  //array[n_time] vector[n_node_sim - 2] y = ode_bdf(rhs, y_0[2:n_node_sim - 1], t_0, times, n_node_sim, d, a, dx, y_bc_left, y_bc_right);
+  array[n_time] vector[n_node_sim - 2] y = ode_bdf_tol(rhs, y_0[2:n_node_sim - 1], t_0, times, rel_tol, abs_tol, max_num_steps, n_node_sim, d, a, dx, y_bc_left, y_bc_right);
 
-  //array[n_time] vector[n_node - 2] y =
-    //ode_adjoint_tol_ctl(rhs, y_0_obs[2:n_node - 1], t_0, times,
+  //array[n_time] vector[n_node_sim - 2] y =
+    //ode_adjoint_tol_ctl(rhs, y_0[2:n_node_sim - 1], t_0, times,
                         //rel_tol/9.0,                         // forward tolerance
-                        //rep_vector(abs_tol/9.0, n_node - 2), // forward tolerance
+                        //rep_vector(abs_tol/9.0, n_node_sim - 2), // forward tolerance
                         //rel_tol/3.0,                         // backward tolerance
-                        //rep_vector(abs_tol/3.0, n_node - 2), // backward tolerance
+                        //rep_vector(abs_tol/3.0, n_node_sim - 2), // backward tolerance
                         //rel_tol,                             // quadrature tolerance
                         //abs_tol,                             // quadrature tolerance
                         //max_num_steps,
@@ -106,9 +116,25 @@ transformed parameters {
                         //1,                                   // interpolation polynomial: 1=Hermite, 2=polynomial
                         //2,                                   // solver for forward phase: 1=Adams, 2=BDF 
                         //2,                                   // solver for backward phase: 1=Adams, 2=BDF 
-                        //n_node, d, a, dx, y_bc_left, y_bc_right);
+                        //n_node_sim, d, a, dx, y_bc_left, y_bc_right);
 
-  //print(y);
+
+  array[n_time] vector[n_node_data - 2] y_interp;
+
+  // Interpolate the solution onto the data grid
+  // TODO: check index offsets:
+  // * y_obs includes boundaries
+  // * y doesn't
+  // * node_indices start at 0 (at the left boundary)
+  // * loop starts at 2 below
+  // * ...?
+  // => it's complicated
+  for (i in 1:n_time) {
+    for (j in 2:n_node_data - 1) {
+      y_interp[i, j - 1] = node_distances[j, 1] * y[i, node_indices[j, 1]]
+        + node_distances[j, 2] * y[i, node_indices[j, 2]];
+    }
+  }
 }
 
 model {
@@ -116,7 +142,7 @@ model {
   // ----------
 
   for (i in 1:n_time) {
-    y_obs[i, 2:n_node - 1] ~ normal(y[i], sigma); // T[0, ];
+    y_obs[i, 2:n_node_data - 1] ~ normal(y_interp[i], sigma); // T[0, ];
   }
 
   // Priors
@@ -133,20 +159,20 @@ model {
 }
 
 generated quantities {
-  array[n_output_time + 1] vector[n_node] y_sim;
+  array[n_output_time + 1] vector[n_node_sim] y_sim;
 
-  y_sim[1] = y_0_obs;
+  y_sim[1] = y_0;
 
-  y_sim[2:n_output_time + 1, 2:n_node - 1] = ode_bdf_tol(rhs, y_0_obs[2:n_node - 1], t_0, output_times, rel_tol, abs_tol, max_num_steps, n_node, d, a, dx, y_bc_left, y_bc_right);
+  y_sim[2:n_output_time + 1, 2:n_node_sim - 1] = ode_bdf_tol(rhs, y_0[2:n_node_sim - 1], t_0, output_times, rel_tol, abs_tol, max_num_steps, n_node_sim, d, a, dx, y_bc_left, y_bc_right);
 
   y_sim[2:n_output_time + 1, 1] = rep_array(y_bc_left, n_output_time);
-  y_sim[2:n_output_time + 1, n_node] = rep_array(y_bc_right, n_output_time);
+  y_sim[2:n_output_time + 1, n_node_sim] = rep_array(y_bc_right, n_output_time);
 
-  array[n_output_time + 1] vector[n_node] y_sim_with_noise = y_sim;
+  array[n_output_time + 1] vector[n_node_sim] y_sim_with_noise = y_sim;
 
   // Add normal noise to all outputs except the ICs and BCs
   for (t in 2:n_output_time + 1) {
-    for (n in 2:n_node - 1) {
+    for (n in 2:n_node_sim - 1) {
       y_sim_with_noise[t, n] += normal_rng(0, sigma);
     }
   }
