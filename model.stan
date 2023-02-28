@@ -48,8 +48,8 @@ data {
   real<lower=0> t_0;
 
   // Initial conditions for y
-  // TODO if provided as data, need to interpolate onto the computational grid
-  // Alternatively, set the ICs in transformed data
+  // Either needs to be interpolated onto the computational grid before being
+  // provided to Stan as `data`, or set the ICs directly in `transformed data`.
   //vector[n_node_sim] y_0;
 
   // Times of data points
@@ -107,36 +107,11 @@ transformed parameters {
   y[1:n_time, n_node_sim] = rep_array(0.0, n_time);
 
   // Solve the ODE system for the bulk values and set them
-  //array[n_time] vector[n_node_sim] y = ode_rk45_tol(rhs, y_0[2:n_node_sim - 1], t_0, times, rel_tol, abs_tol, max_num_steps, n_node_sim, d, a, dx);
-  //array[n_time] vector[n_node_sim - 2] y = ode_bdf(rhs, y_0[2:n_node_sim - 1], t_0, times, n_node_sim, d, a, dx, y_bc_left, y_bc_right);
   y[1:n_time, 2:n_node_sim - 1] = ode_bdf_tol(rhs, y_0[2:n_node_sim - 1], t_0, times, rel_tol, abs_tol, max_num_steps, n_node_sim, d, a, dx, y_bc_left, y_bc_right);
-
-  //array[n_time] vector[n_node_sim - 2] y =
-    //ode_adjoint_tol_ctl(rhs, y_0[2:n_node_sim - 1], t_0, times,
-                        //rel_tol/9.0,                         // forward tolerance
-                        //rep_vector(abs_tol/9.0, n_node_sim - 2), // forward tolerance
-                        //rel_tol/3.0,                         // backward tolerance
-                        //rep_vector(abs_tol/3.0, n_node_sim - 2), // backward tolerance
-                        //rel_tol,                             // quadrature tolerance
-                        //abs_tol,                             // quadrature tolerance
-                        //max_num_steps,
-                        //150,                                 // number of steps between checkpoints
-                        //1,                                   // interpolation polynomial: 1=Hermite, 2=polynomial
-                        //2,                                   // solver for forward phase: 1=Adams, 2=BDF 
-                        //2,                                   // solver for backward phase: 1=Adams, 2=BDF 
-                        //n_node_sim, d, a, dx, y_bc_left, y_bc_right);
-
 
   array[n_time] vector[n_node_data - 2] y_interp;
 
   // Interpolate the solution onto the data grid
-  // TODO: check index offsets:
-  // * y_obs includes boundaries
-  // * y doesn't
-  // * node_indices start at 0 (at the left boundary)
-  // * loop starts at 2 below
-  // * ...?
-  // => it's complicated
   for (i in 1:n_time) {
     for (j in 2:n_node_data - 1) {
       y_interp[i, j - 1] = node_distances[j, 1] * y[i, node_indices[j, 1] + 1]
@@ -150,7 +125,7 @@ model {
   // ----------
 
   for (i in 1:n_time) {
-    y_obs[i, 2:n_node_data - 1] ~ normal(y_interp[i], sigma); // T[0, ];
+    y_obs[i, 2:n_node_data - 1] ~ normal(y_interp[i], sigma);
   }
 
   // Priors

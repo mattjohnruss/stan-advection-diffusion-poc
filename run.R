@@ -75,7 +75,7 @@ max_time <- 1.0
 # Stan doesn't allow outputting the ode solution at time == initial time, so do
 # one more time than required starting at t = 0, then remove the first one so
 # we end up with `n_output_data` times, but without t = 0
-output_times_full <- seq(0, 1, length.out = n_output_time + 1) * max_time
+output_times_full <- seq(0, max_time, length.out = n_output_time + 1)
 output_times <- output_times_full[-1]
 
 # Construct the data list to send to Stan
@@ -149,6 +149,7 @@ y_posterior_quantiles <- y_posterior_draws[
 # Plot posterior draw quantiles with data overlaid
 
 # Spatial profiles for each output time
+# NOTE: only really works when the simulation output times overlap with data
 ggplot(
   y_posterior_quantiles,
   aes(x = x, y = median, colour = time, fill = time)
@@ -157,10 +158,12 @@ ggplot(
   geom_line() +
   geom_line(data = data_raw_long, aes(y = y), linewidth = 0.5, linetype = "dotted") +
   geom_point(data = data_raw_long, aes(y = y), shape = 21, colour = "black", size = 1) +
-  facet_wrap(vars(factor(time)))
+  facet_wrap(vars(factor(time))) +
+  theme_cowplot() +
+  background_grid()
 
 # Value at each node as a time series
-# NOTE: no longer works when the data and computational grids differ
+# NOTE: only really works when the data and computational nodes coincide
 ggplot(
   y_posterior_quantiles,
   aes(x = time, y = median, colour = x, fill = x)
