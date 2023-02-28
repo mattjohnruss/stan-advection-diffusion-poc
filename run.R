@@ -29,14 +29,8 @@ nodes_data_scaled <-
 node_lookup <- data.table(
   l = floor(nodes_data_scaled) %>% as.integer,
   r = ceiling(nodes_data_scaled) %>% as.integer,
-  d_l = nodes_data_scaled - floor(nodes_data_scaled),
-  d_r = ceiling(nodes_data_scaled) - nodes_data_scaled
+  s = nodes_data_scaled - floor(nodes_data_scaled)
 )
-
-# When a data node exactly coincides with a computational node, the above
-# assigns d_l = d_r = 0, so change d_l to 1 here (d_r = 1 would also work)
-node_lookup[l == r, d_l := 1.0]
-node_lookup[l == r, d_r := 0.0]
 
 data_raw_t <- transpose(data_raw)
 data_raw_t[, x := seq(0, 1, length.out = n_node_data)]
@@ -89,7 +83,7 @@ data_list <- list(
   times = times,
   y_obs = y_obs,
   node_indices = node_lookup[, .(l, r)] %>% as.matrix,
-  node_distances = node_lookup[, .(d_l, d_r)] %>% as.matrix,
+  s = node_lookup[, s],
   rel_tol = 1e-3,
   abs_tol = 1e-6,
   max_num_steps = 1000,

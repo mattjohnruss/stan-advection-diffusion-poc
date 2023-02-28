@@ -61,7 +61,7 @@ data {
 
   // Lookup tables for interpolating solution onto data grid
   array[n_node_data, 2] int node_indices;
-  array[n_node_data, 2] real node_distances;
+  array[n_node_data] real s;
 
   // ODE solver parameters
   real rel_tol;
@@ -114,8 +114,8 @@ transformed parameters {
   // Interpolate the solution onto the data grid
   for (i in 1:n_time) {
     for (j in 2:n_node_data - 1) {
-      y_interp[i, j - 1] = node_distances[j, 1] * y[i, node_indices[j, 1] + 1]
-        + node_distances[j, 2] * y[i, node_indices[j, 2] + 1];
+      y_interp[i, j - 1] =
+        lerp(y[i, node_indices[j, 1] + 1], y[i, node_indices[j, 2] + 1], s[j]);
     }
   }
 }
