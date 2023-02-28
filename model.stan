@@ -99,9 +99,17 @@ parameters {
 }
 
 transformed parameters {
+  // Solution, including boundaries (required for interp)
+  array[n_time] vector[n_node_sim] y;
+
+  // Set the boundary values
+  y[1:n_time, 1] = rep_array(0.0, n_time);
+  y[1:n_time, n_node_sim] = rep_array(0.0, n_time);
+
+  // Solve the ODE system for the bulk values and set them
   //array[n_time] vector[n_node_sim] y = ode_rk45_tol(rhs, y_0[2:n_node_sim - 1], t_0, times, rel_tol, abs_tol, max_num_steps, n_node_sim, d, a, dx);
   //array[n_time] vector[n_node_sim - 2] y = ode_bdf(rhs, y_0[2:n_node_sim - 1], t_0, times, n_node_sim, d, a, dx, y_bc_left, y_bc_right);
-  array[n_time] vector[n_node_sim - 2] y = ode_bdf_tol(rhs, y_0[2:n_node_sim - 1], t_0, times, rel_tol, abs_tol, max_num_steps, n_node_sim, d, a, dx, y_bc_left, y_bc_right);
+  y[1:n_time, 2:n_node_sim - 1] = ode_bdf_tol(rhs, y_0[2:n_node_sim - 1], t_0, times, rel_tol, abs_tol, max_num_steps, n_node_sim, d, a, dx, y_bc_left, y_bc_right);
 
   //array[n_time] vector[n_node_sim - 2] y =
     //ode_adjoint_tol_ctl(rhs, y_0[2:n_node_sim - 1], t_0, times,
@@ -131,8 +139,8 @@ transformed parameters {
   // => it's complicated
   for (i in 1:n_time) {
     for (j in 2:n_node_data - 1) {
-      y_interp[i, j - 1] = node_distances[j, 1] * y[i, node_indices[j, 1]]
-        + node_distances[j, 2] * y[i, node_indices[j, 2]];
+      y_interp[i, j - 1] = node_distances[j, 1] * y[i, node_indices[j, 1] + 1]
+        + node_distances[j, 2] * y[i, node_indices[j, 2] + 1];
     }
   }
 }
