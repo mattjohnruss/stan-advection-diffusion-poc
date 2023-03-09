@@ -9,6 +9,8 @@ library(ggfan)
 
 options(mc.cores = 16)
 
+theme_set(theme_cowplot() + background_grid())
+
 # Read the raw data into a single data.table
 data_raw <- fread("synthetic_data.csv")
 times_raw <- fread("synthetic_data_times.csv")
@@ -43,7 +45,7 @@ setcolorder(data_raw_long, c("time", "x", "y"))
 # Plot the raw data
 ggplot(data_raw_long, aes(x = x, y = y, colour = time)) +
   geom_line(linewidth = 0.5, linetype = "dotted") +
-  geom_point(size = 1) +
+  geom_point(size = 2) +
   facet_wrap(vars(factor(time)))
 
 # Get the number of observations
@@ -153,7 +155,6 @@ ggplot(
   geom_line(data = data_raw_long, aes(y = y), linewidth = 0.5, linetype = "dotted") +
   geom_point(data = data_raw_long, aes(y = y), shape = 21, colour = "black", size = 1) +
   facet_wrap(vars(factor(time))) +
-  theme_cowplot() +
   background_grid()
 
 # Value at each node as a time series
